@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/JamesPEarly/loggly"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/gorilla/mux"
-	"github.com/joho/godotenv"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 )
@@ -71,6 +73,35 @@ func (lrw *loggingResponseWriter) WriteHeader(code int) {
 	lrw.ResponseWriter.WriteHeader(code)
 }
 
+func StatusHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String("us-east-1")},
+	)
+	if err != nil {
+		log.Fatalf("Got error initializing AWS: %s", err)
+	}
+
+	svc := dynamodb.New(sess)
+
+	input := &dynamodb.DescribeTableInput{
+		TableName: aws.String("asigdel-topstocks"),
+	}
+
+	result, err := svc.DescribeTable(input)
+	if err != nil {
+		log.Fatalf("Got error describing table: %s", err)
+	}
+
+	var statusResponse TableStatus
+	statusResponse.Table = "asigdel-topstocks"
+	statusResponse.Count = result.Table.ItemCount
+
+	json.NewEncoder(w).Encode(statusResponse)
+}
+
 func NewLoggingResponseWriter(w http.ResponseWriter) *loggingResponseWriter {
 	return &loggingResponseWriter{w, http.StatusOK}
 }
@@ -86,21 +117,10 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func goDotEnvVariable(key string) string {
-	err := godotenv.Load(".env")
-
-	if err != nil {
-		log.Fatalf("Error loading .env file")
-	}
-
-	return os.Getenv(key)
-}
-
 func main() {
-	os.Setenv("LOGGLY_TOKEN", goDotEnvVariable("LOGGLY_TOKEN"))
-	os.Setenv("AWS_ACCESS_KEY_ID", goDotEnvVariable("AWS_ACCESS_KEY_ID"))
-	os.Setenv("AWS_SECRET_ACCESS_KEY", goDotEnvVariable("AWS_SECRET_ACCESS_KEY"))
+
 	r := mux.NewRouter()
+	r.HandleFunc("/asigdel/status", StatusHandler).Methods("GET")
 	wrappedRouter := loggingMiddleware(r)
 	http.ListenAndServe(":3000", wrappedRouter)
 }
