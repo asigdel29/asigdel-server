@@ -1,17 +1,27 @@
-FROM golang:1.16-alpine
+FROM golang:latest AS build
 
 WORKDIR /app
+COPY . .
 
-COPY go.mod ./
-COPY go.sum ./
-RUN go mod download
+RUN go mod tidy
+
+RUN CGO_ENABLED=0 GOOS=linux go build -a -o main .
+
+FROM alpine:latest
+
+RUN apk update && \
+    apk upgrade && \
+    apk add ca-certificates
+
+WORKDIR /
+
+EXPOSE 8080
+ENV FILE = my-env.txt
 
 
+COPY --from=build /app/main ./
 
-COPY *.go ./
+RUN env && pwd && find .
 
-RUN go build -o /asigdel-server
+CMD ["./main"]
 
-EXPOSE 3000
-
-CMD [ "/asigdel-server" ]
