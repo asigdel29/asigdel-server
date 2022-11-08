@@ -16,8 +16,6 @@ RUN apk update && \
 WORKDIR /
 
 EXPOSE 8080
-ENV FILE = my-env.txt
-
 
 COPY --from=build /app/main ./
 
